@@ -2,8 +2,22 @@ from bs4 import BeautifulSoup
 import requests
 import json
 import datetime
+import unicodedata
+import pdb
 
+CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
+
+# TODO: Is there a more Pythonic way?
+def item_formatter(title, start_year, end_year, location, link, data_provider):
+    return {
+        'title': title,
+        'start_year': start_year,
+        'end_year': end_year,
+        'location': location,
+        'link': link,
+        'data_provider': data_provider
+    }
 
 # https://chroniclingamerica.loc.gov/
 def extract_chronicling_america():
@@ -14,16 +28,24 @@ def extract_chronicling_america():
         headers = USER_AGENT
     ).json()
 
+    print(len(overview["newspapers"]))
+
     for newspaper in overview["newspapers"]:
         newspaper_details = requests.get(
             url = newspaper["url"],
             headers = USER_AGENT
         ).json()
 
-        # Largest key by far, and not needed -- remove to save memory.
-        del newspaper_details["issues"]
-
-        titles.append(newspaper_details)
+        titles.append(item_formatter(
+            title=newspaper_details['name'],
+            start_year=newspaper_details['issues'][0]['date_issued'],
+            # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
+            # Besides, we're more interested in what's digitized than publication dates.
+            end_year=newspaper_details['issues'][-1]['date_issued'],
+            location=newspaper_details['place_of_publication'],
+            link=newspaper_details['url'],
+            data_provider="ChroniclingAmerica.loc.gov"
+        ))
 
     return titles
 
@@ -51,14 +73,22 @@ def extract_newspapers():
         if not total_newspapers:
             total_newspapers = response['count']
         
-        titles.extend(response['titles'])
+        for title in response['titles']:
+            titles.append(item_formatter(
+                title=title['title'],
+                start_year=title['product_canonical_start_year'],
+                end_year=title['product_canonical_end_year'],
+                location=title['location']['display'],
+                link= f"https://www.newspapers.com/{newspaper_details['url']}",
+                data_provider="Newspapers.com"
+            ))
+
         newspapers_scanned += increment
 
     return titles
 
 # https://newspaperarchive.com/
 def extract_newspaper_archive():
-    CURRENT_YEAR = datetime.date.today().year
     titles = []
 
     page = 1
@@ -90,16 +120,20 @@ def extract_newspaper_archive():
 
         for row in table_rows:
             columns = row.find_all('td')
-            item = {
-                'name': columns[0].text.strip(),
-                'link': columns[0].a['href'],
-                'location': columns[1].text.strip(),
-                'state': columns[2].text.strip(),
-                'country': columns[3].text.strip(),
-                'date_range': columns[4].text.strip(),
-                'last_updated': columns[6].text.strip()
-            }
-            titles.append(item)
+
+            location = columns[1].text.strip()
+            state = columns[2].text.strip()
+            country = columns[3].text.strip()
+            start_year, end_year = columns[4].text.strip().split("-")
+
+            titles.append(item_formatter(
+                title=columns[0].text.strip(),
+                start_year=start_year,
+                end_year=end_year,
+                location=f"{location}, {state}, {country}",
+                link=columns[0].a['href'],
+                data_provider="NewspaperArchive.com"
+            ))
 
         # If publicationrowstring is blank, we exhausted the dataset.
         page_has_data = bool(decoded_html.strip())
@@ -120,7 +154,6 @@ def extract_nys_historic_newspapers():
     soup = BeautifulSoup(decoded_html, 'html.parser')
     table = soup.find('table', class_='browse_collect')
     table_rows = table.find_all('tr')
-    headers = [header.text.strip() for header in table_rows[0].find_all('th')]
 
     for row in table_rows[1:]:
         columns = row.find_all('td')
@@ -130,12 +163,64 @@ def extract_nys_historic_newspapers():
         # Stripping publication years -- redundant with third and fourth columns.
         location = publicationOverview[0:publicationOverview.rindex(',')]
 
-        item = {
-            headers[0]: columns[0].strong.text,
-            'Location': location,
-            headers[3]: columns[3].text.strip(),
-            headers[4]: columns[4].text.strip()
-        }
-        titles.append(item)
+        titles.append(item_formatter(
+            title=columns[0].strong.text,
+            start_year=columns[3].text.strip(),
+            end_year=columns[4].text.strip(),
+            location=location,
+            link=f"https://nyshistoricnewspapers.org{columns[0].a['href']}",
+            data_provider="NYSHistoricNewspapers.org"
+        ))
 
     return titles
+
+def extract_genealogy_bank():
+    BASE_URL = "https://www.genealogybank.com/newspapers/sourcelist/"
+    STATE_LIST = ['AK', 'AL', 'AR', 'AZ', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL',
+                'GA', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA',
+                'MD', 'ME', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE',
+                'NH', 'NJ', 'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'RI',
+                'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV', 
+                'WY']
+
+    papers = []
+
+    for state_name in STATE_LIST:
+        current_page_number = 0
+        total_papers = 0
+        total_webpages = 0
+
+        while current_page_number <= total_webpages:
+            url = BASE_URL + state_name + f"?page={current_page_number}"
+            r = requests.get(url)
+            print(url)
+            soup = BeautifulSoup(r.content, 'html.parser')
+
+            # Finds paper count that is listed at the top for each state's page.
+            if not total_papers:
+                total_papers = int(soup.find('h1').text.split(" ")[3])
+            # GenealogyBank indexes website at 1, but query parameter at 0.
+            if not total_webpages:
+                total_webpages = int(total_papers/200)
+
+            table = soup.find('table', class_='views-table')
+            table_rows = table.find_all('tr')
+
+            for row in table_rows[1:]:
+                columns = row.find_all('td')
+                city = columns[0].text.strip()
+                start_date, end_date = unicodedata.normalize("NFKD", columns[2].text.strip()).split("–")
+
+                papers.append(item_formatter(
+                    title=columns[1].a.text,
+                    start_year=start_date,
+                    end_year=CURRENT_YEAR if end_date.trim() == "CURRENT" else end_date,
+                    location=f"{city}, {state_name}",
+                    link=f"https://genealogybank.com.org{columns[1].a['href']}",
+                    data_provider="GenealogyBank.com"
+                ))
+
+                print(papers)
+
+            current_page_number += 1
+    return papers
