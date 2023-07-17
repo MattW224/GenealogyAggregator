@@ -3,7 +3,7 @@ import requests
 import json
 import datetime
 import unicodedata
-import pdb
+import pandas
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
@@ -22,13 +22,12 @@ def item_formatter(title, start_year, end_year, location, link, data_provider):
 # https://chroniclingamerica.loc.gov/
 def extract_chronicling_america():
     titles = []
+    counter = 0
 
     overview = requests.get(
         url = "https://chroniclingamerica.loc.gov/newspapers.json",
         headers = USER_AGENT
     ).json()
-
-    print(len(overview["newspapers"]))
 
     for newspaper in overview["newspapers"]:
         newspaper_details = requests.get(
@@ -36,16 +35,21 @@ def extract_chronicling_america():
             headers = USER_AGENT
         ).json()
 
+        start_date = newspaper_details['issues'][0]['date_issued']
+        end_date = newspaper_details['issues'][-1]['date_issued']
+
         titles.append(item_formatter(
+            # TODO: Remove "[volume]" postfix from newspaper name.
             title=newspaper_details['name'],
-            start_year=newspaper_details['issues'][0]['date_issued'],
+            start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
             # Besides, we're more interested in what's digitized than publication dates.
-            end_year=newspaper_details['issues'][-1]['date_issued'],
+            end_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             location=newspaper_details['place_of_publication'],
             link=newspaper_details['url'],
             data_provider="ChroniclingAmerica.loc.gov"
         ))
+        counter += 1
 
     return titles
 
@@ -79,7 +83,7 @@ def extract_newspapers():
                 start_year=title['product_canonical_start_year'],
                 end_year=title['product_canonical_end_year'],
                 location=title['location']['display'],
-                link= f"https://www.newspapers.com/{newspaper_details['url']}",
+                link= f"https://www.newspapers.com{title['url']}",
                 data_provider="Newspapers.com"
             ))
 
@@ -127,6 +131,7 @@ def extract_newspaper_archive():
             start_year, end_year = columns[4].text.strip().split("-")
 
             titles.append(item_formatter(
+                # TODO: Remove "NEW" and "UPDATED" postfix from title.
                 title=columns[0].text.strip(),
                 start_year=start_year,
                 end_year=end_year,
@@ -163,10 +168,13 @@ def extract_nys_historic_newspapers():
         # Stripping publication years -- redundant with third and fourth columns.
         location = publicationOverview[0:publicationOverview.rindex(',')]
 
+        start_date = columns[3].text.strip()
+        end_date = columns[4].text.strip()
+
         titles.append(item_formatter(
             title=columns[0].strong.text,
-            start_year=columns[3].text.strip(),
-            end_year=columns[4].text.strip(),
+            start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
+            end_year=datetime.datetime.strptime(end_date, "%Y-%m-%d").year,
             location=location,
             link=f"https://nyshistoricnewspapers.org{columns[0].a['href']}",
             data_provider="NYSHistoricNewspapers.org"
@@ -213,8 +221,8 @@ def extract_genealogy_bank():
 
                 papers.append(item_formatter(
                     title=columns[1].a.text,
-                    start_year=start_date,
-                    end_year=CURRENT_YEAR if end_date.strip() == "Current" else end_date,
+                    start_year=datetime.datetime.strptime(start_date.strip(), "%m/%d/%Y").year,
+                    end_year=CURRENT_YEAR if end_date.strip() == "Current" else datetime.datetime.strptime(end_date.strip(), "%m/%d/%Y").year,
                     location=f"{city}, {state_name}",
                     link=f"https://genealogybank.com.org{columns[1].a['href']}",
                     data_provider="GenealogyBank.com"
@@ -222,3 +230,10 @@ def extract_genealogy_bank():
 
             current_page_number += 1
     return papers
+
+def data_dumper(newspaper_data, filename):
+    dataframe = pandas.read_json(json.dumps(newspaper_data))
+    dataframe.to_csv(filename, encoding="utf-8", index=False)
+
+# Sample usage
+# data_dumper(extract_nys_historic_newspapers(), 'nys_historic.csv')
