@@ -214,13 +214,11 @@ def extract_genealogy_bank():
                 papers.append(item_formatter(
                     title=columns[1].a.text,
                     start_year=start_date,
-                    end_year=CURRENT_YEAR if end_date.trim() == "Current" else end_date,
+                    end_year=CURRENT_YEAR if end_date.strip() == "Current" else end_date,
                     location=f"{city}, {state_name}",
                     link=f"https://genealogybank.com.org{columns[1].a['href']}",
                     data_provider="GenealogyBank.com"
                 ))
-
-                print(papers)
 
             current_page_number += 1
     return papers
