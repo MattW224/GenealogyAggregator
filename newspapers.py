@@ -4,6 +4,7 @@ import json
 import datetime
 import unicodedata
 import pandas
+import pdb
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
@@ -35,8 +36,12 @@ def extract_chronicling_america():
             headers = USER_AGENT
         ).json()
 
+        print(counter)
+
         start_date = newspaper_details['issues'][0]['date_issued']
         end_date = newspaper_details['issues'][-1]['date_issued']
+
+        place_name = newspaper_details['place'][0]
 
         titles.append(item_formatter(
             # TODO: Remove "[volume]" postfix from newspaper name.
@@ -45,10 +50,11 @@ def extract_chronicling_america():
             # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
             # Besides, we're more interested in what's digitized than publication dates.
             end_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
-            location=newspaper_details['place_of_publication'],
-            link=newspaper_details['url'],
+            location=", ".join(place_name.split("--")[::-1]),
+            link=newspaper_details['url'][:-5],
             data_provider="ChroniclingAmerica.loc.gov"
         ))
+
         counter += 1
 
     return titles
@@ -236,4 +242,4 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-# data_dumper(extract_nys_historic_newspapers(), 'nys_historic.csv')
+# data_dumper(extract_chronicling_america(), 'chronicling_america.csv')
