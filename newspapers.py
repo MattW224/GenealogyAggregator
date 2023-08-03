@@ -23,10 +23,10 @@ def __item_formatter(title, start_year, end_year, location, link, data_provider)
 
 async def __fetch(session, url):
     async with session.get(url, ssl=True) as response:
-        return await response.json()
+        return await response.json(content_type="application/json")
 
 async def __fetch_all(urls, loop):
-    async with aiohttp.ClientSession(loop=loop) as session:
+    async with aiohttp.ClientSession(loop=loop, headers=USER_AGENT) as session:
         results = await asyncio.gather(*[__fetch(session, url) for url in urls], return_exceptions=True)
         return results
 
@@ -68,27 +68,38 @@ def extract_chronicling_america():
 def extract_newspapers():
     increment = 50
     newspapers_scanned = 0
-    total_newspapers = 0
 
+    newspaper_urls = []
     titles = []
 
+    total_newspapers = requests.get(
+        url = "https://www.newspapers.com/api/title/query",
+        params = {
+            "fields": ["count"],
+            "product-id": ["1"]
+        },
+        headers = USER_AGENT
+    ).json()['count']
+
     while newspapers_scanned <= total_newspapers:
-        response = requests.get(
-            url = "https://www.newspapers.com/api/title/query",
-            params = {
+        prepared_request = requests.Request('GET', 'https://www.newspapers.com/api/title/query', params =
+            {
                 "start": [newspapers_scanned],
                 "count": [increment],
                 "sort": ["updated"],
-                "fields": ["title,url,location.display,updated,product_canonical_start_year,product_canonical_end_year,count"],
-                "product-id": ["1"]
-            },
-            headers = USER_AGENT
-        ).json()
+                "fields": ["title,url,location.display,updated,product_canonical_start_year,product_canonical_end_year"],
+                "product-id": ["1"]   
+            }
+        ).prepare()
 
-        if not total_newspapers:
-            total_newspapers = response['count']
-        
-        for title in response['titles']:
+        newspaper_urls.append(prepared_request.url)
+        newspapers_scanned += increment
+
+    loop = asyncio.get_event_loop()
+    paginated_response = loop.run_until_complete(__fetch_all(newspaper_urls, loop))
+
+    for page in paginated_response:
+        for title in page["titles"]:
             titles.append(__item_formatter(
                 title=title['title'],
                 start_year=title['product_canonical_start_year'],
@@ -97,8 +108,6 @@ def extract_newspapers():
                 link= f"https://www.newspapers.com{title['url']}",
                 data_provider="Newspapers.com"
             ))
-
-        newspapers_scanned += increment
 
     return titles
 
@@ -247,4 +256,4 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-# data_dumper(extract_chronicling_america(), 'chronicling_america.csv')
+data_dumper(extract_chronicling_america(), 'chronicling_america.csv')
