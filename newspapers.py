@@ -4,13 +4,14 @@ import json
 import datetime
 import unicodedata
 import pandas
-import pdb
+import aiohttp
+import asyncio
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
 
 # TODO: Is there a more Pythonic way?
-def item_formatter(title, start_year, end_year, location, link, data_provider):
+def __item_formatter(title, start_year, end_year, location, link, data_provider):
     return {
         'title': title,
         'start_year': start_year,
@@ -20,42 +21,46 @@ def item_formatter(title, start_year, end_year, location, link, data_provider):
         'data_provider': data_provider
     }
 
+async def __fetch(session, url):
+    async with session.get(url, ssl=True) as response:
+        return await response.json()
+
+async def __fetch_all(urls, loop):
+    async with aiohttp.ClientSession(loop=loop) as session:
+        results = await asyncio.gather(*[__fetch(session, url) for url in urls], return_exceptions=True)
+        return results
+
 # https://chroniclingamerica.loc.gov/
 def extract_chronicling_america():
     titles = []
-    counter = 0
 
     overview = requests.get(
         url = "https://chroniclingamerica.loc.gov/newspapers.json",
         headers = USER_AGENT
     ).json()
 
-    for newspaper in overview["newspapers"]:
-        newspaper_details = requests.get(
-            url = newspaper["url"],
-            headers = USER_AGENT
-        ).json()
+    newspaper_urls = [newspaper["url"] for newspaper in overview["newspapers"]]
+    
+    loop = asyncio.get_event_loop()
+    newspapers = loop.run_until_complete(__fetch_all(newspaper_urls, loop))
 
-        print(counter)
+    for newspaper in newspapers:
+        start_date = newspaper['issues'][0]['date_issued']
+        end_date = newspaper['issues'][-1]['date_issued']
 
-        start_date = newspaper_details['issues'][0]['date_issued']
-        end_date = newspaper_details['issues'][-1]['date_issued']
+        place_name = newspaper['place'][0]
 
-        place_name = newspaper_details['place'][0]
-
-        titles.append(item_formatter(
+        titles.append(__item_formatter(
             # TODO: Remove "[volume]" postfix from newspaper name.
-            title=newspaper_details['name'],
+            title=newspaper['name'],
             start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
             # Besides, we're more interested in what's digitized than publication dates.
             end_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             location=", ".join(place_name.split("--")[::-1]),
-            link=newspaper_details['url'][:-5],
+            link=newspaper['url'][:-5],
             data_provider="ChroniclingAmerica.loc.gov"
         ))
-
-        counter += 1
 
     return titles
 
@@ -84,7 +89,7 @@ def extract_newspapers():
             total_newspapers = response['count']
         
         for title in response['titles']:
-            titles.append(item_formatter(
+            titles.append(__item_formatter(
                 title=title['title'],
                 start_year=title['product_canonical_start_year'],
                 end_year=title['product_canonical_end_year'],
@@ -136,7 +141,7 @@ def extract_newspaper_archive():
             country = columns[3].text.strip()
             start_year, end_year = columns[4].text.strip().split("-")
 
-            titles.append(item_formatter(
+            titles.append(__item_formatter(
                 # TODO: Remove "NEW" and "UPDATED" postfix from title.
                 title=columns[0].text.strip(),
                 start_year=start_year,
@@ -177,7 +182,7 @@ def extract_nys_historic_newspapers():
         start_date = columns[3].text.strip()
         end_date = columns[4].text.strip()
 
-        titles.append(item_formatter(
+        titles.append(__item_formatter(
             title=columns[0].strong.text,
             start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             end_year=datetime.datetime.strptime(end_date, "%Y-%m-%d").year,
@@ -225,7 +230,7 @@ def extract_genealogy_bank():
                 city = columns[0].text.strip()
                 start_date, end_date = unicodedata.normalize("NFKD", columns[2].text.strip()).split("–")
 
-                papers.append(item_formatter(
+                papers.append(__item_formatter(
                     title=columns[1].a.text,
                     start_year=datetime.datetime.strptime(start_date.strip(), "%m/%d/%Y").year,
                     end_year=CURRENT_YEAR if end_date.strip() == "Current" else datetime.datetime.strptime(end_date.strip(), "%m/%d/%Y").year,
