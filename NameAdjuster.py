@@ -47,7 +47,7 @@ def reduce_clutter(town_list):
 
 mylist = []
 
-with open('collated_newchron.csv', 'r', encoding="utf8") as csv_file:
+with open('scraped_data.csv', 'r', encoding="utf8") as csv_file:
     reader = csv.reader(csv_file)
     paper_list = [rows for rows in reader]
     
@@ -123,18 +123,12 @@ header = ['town_name', 'new_town_name']
 
 #print(mylist)
 
-with open('coord_database.csv', 'w', encoding='UTF8', newline='') as f:
-    csvwriter = csv.writer(f)
-    csvwriter.writerow(header)
-    csvwriter.writerows(mylist)
-
-
 modified_town_list = [x[1] for x in mylist]
 reduced_list = reduce_clutter(modified_town_list)
 no_duplicates = [*set(reduced_list)]
 new = [[x] for x in no_duplicates]
 
-with open('town_lookup.csv', 'w', encoding='UTF8', newline='') as f:
+with open('NameAdjuster_Result.csv', 'w', encoding='UTF8', newline='') as f:
     csvwriter = csv.writer(f)
     csvwriter.writerows(new)
 

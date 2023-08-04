@@ -24,11 +24,11 @@ state_abrv  =  {'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansa
                'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia'}
 
 
-with open('town_lookup2.csv', 'r', encoding="utf8") as csv_file:
+with open('town_catalog.csv', 'r', encoding="utf8") as csv_file:
     reader = csv.reader(csv_file)
     town_catalog = [rows[0] for rows in reader]
     
-with open('town_lookup.csv', 'r', encoding="utf8") as csv_file:
+with open('NameAdjuster_Result.csv', 'r', encoding="utf8") as csv_file:
     reader = csv.reader(csv_file)
     town_list = [rows[0] for rows in reader]
     
@@ -138,6 +138,6 @@ for i in range(len(wiki_list)):
 final_list = [list(a) for a in zip(wiki_list, latitude_list, longitude_list)]
 
 
-with open('town_lookup1.csv', 'w', encoding='UTF8', newline='') as f:
+with open('CatalogComparer_wikidata.csv', 'w', encoding='UTF8', newline='') as f:
     csvwriter = csv.writer(f)
     csvwriter.writerows(final_list)
