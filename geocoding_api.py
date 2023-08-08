@@ -1,6 +1,7 @@
 import csv
 import requests
 import os
+from states import GEOGRAPHIC_CENTERS
 
 API_KEY = os.getenv("GOOGLE_GEOCODING_API")
 
@@ -41,10 +42,9 @@ for index, coordinate in enumerate(latitude_coordinates):
         continue
 
     new_coordinates = get_coordinates(town_catalog[index])
-    if not new_coordinates:
+    if not new_coordinates or new_coordinates in GEOGRAPHIC_CENTERS:
         continue
 
-    print(town_catalog[index])
     latitude_coordinates[index] = new_coordinates[LATITUDE_KEY]
     longitude_coordinates[index] = new_coordinates[LONGITUDE_KEY]
 
