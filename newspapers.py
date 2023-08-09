@@ -244,7 +244,7 @@ def extract_genealogy_bank():
                     start_year=datetime.datetime.strptime(start_date.strip(), "%m/%d/%Y").year,
                     end_year=CURRENT_YEAR if end_date.strip() == "Current" else datetime.datetime.strptime(end_date.strip(), "%m/%d/%Y").year,
                     location=f"{city}, {state_name}",
-                    link=f"https://genealogybank.com.org{columns[1].a['href']}",
+                    link=f"https://genealogybank.com{columns[1].a['href']}",
                     data_provider="GenealogyBank.com"
                 ))
 
