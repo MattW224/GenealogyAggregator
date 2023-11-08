@@ -6,6 +6,7 @@ import unicodedata
 import pandas
 import aiohttp
 import asyncio
+import pdb
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
@@ -251,6 +252,7 @@ def extract_genealogy_bank():
             current_page_number += 1
     return papers
 
+# https://news.google.com/newspapers
 def extract_google_news_archive():
     GOOGLE_ARCHIVE_ENDPOINT = "https://news.google.com/newspapers"
     ALPHABET = set("A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z")
@@ -290,9 +292,63 @@ def extract_google_news_archive():
 
     return titles
 
+# https://fairhopepl.advantage-preservation.com/
+def extract_archive_preservation():
+    titles = []
+    SITE_DIRECTORY = "https://directory.advantage-preservation.com/SiteDirectory"
+
+    page = requests.get(SITE_DIRECTORY)
+    soup = BeautifulSoup(page.content, "html.parser")
+
+    # Manually parse state names from UI, because "state" is misleading -- not necessarily
+    # US states. It contains oddities like "Cuba" and "Griffin".
+    state_markup = soup.find("ul", {"class": "stateUl"})
+
+    state_newspapers = []
+    for state in state_markup:
+        state_name = state.text.strip()
+        if not state_name:
+            continue
+
+        print(state_name)
+
+        newspapers = requests.get(
+            url = "https://directory.advantage-preservation.com/Date/GetCityListSiteDir",
+            params = {
+                "state": state_name
+            }
+        ).json()
+
+        state_newspapers.extend(newspapers['DataState'])
+
+    for newspaper in state_newspapers:
+        newspaper_details = requests.get(
+            url = newspaper['url'] + "//search",
+            params = {
+                "t": newspaper["TitleID"]
+            }
+        )
+
+        newspaper_soup = BeautifulSoup(newspaper_details.content, "html.parser")
+        date_markup = newspaper_soup.find("input", {"id": "hdnViewAll"})
+        year_range = date_markup['value'].split(',')
+        
+        location = newspaper['cityName'] + ", " + newspaper['StateName']
+
+        titles.append(__item_formatter(
+            title=newspaper['publicationName'],
+            start_year=year_range[0],
+            end_year=year_range[-1],
+            location=location,
+            link=newspaper_details.url,
+            data_provider="Advantage-Preservation.com"
+        ))
+    
+    return titles
+
 def data_dumper(newspaper_data, filename):
     dataframe = pandas.read_json(json.dumps(newspaper_data))
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-data_dumper(extract_google_news_archive(), 'google_news_archive.csv')
+data_dumper(extract_archive_preservation(), 'archive_preservation.csv')
