@@ -251,9 +251,48 @@ def extract_genealogy_bank():
             current_page_number += 1
     return papers
 
+def extract_google_news_archive():
+    GOOGLE_ARCHIVE_ENDPOINT = "https://news.google.com/newspapers"
+    ALPHABET = set("A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z")
+
+    titles = []
+    date_format = "%b %d, %Y"
+
+    page = requests.get(GOOGLE_ARCHIVE_ENDPOINT)
+    soup = BeautifulSoup(page.content, "html.parser")
+
+    # First instance is alphabetical shortcut to newspapers. Second is actual newspapers.
+    markup = soup.findAll("table", {"class": "np-bhp-tbl"})[1]
+    newspaper_row = markup.findAll("tr")
+
+    for datapoint in newspaper_row:
+        newspapers = datapoint.findAll("td")
+
+        # Ignore heading for each alphabet character.
+        if newspapers[0].b.text in ALPHABET:
+            continue
+        
+        for newspaper in newspapers:
+            if 'class' in newspaper.attrs and newspaper.attrs['class'][0] == 'np-bhp-border-cell':
+                continue
+
+            dates = newspaper.findAll("font")[1].text
+            start_date, end_date = dates.split("-")
+
+            titles.append(__item_formatter(
+                title = newspaper.b.text,
+                start_year = datetime.datetime.strptime(start_date.strip(), date_format).year,
+                end_year = datetime.datetime.strptime(end_date.strip(), date_format).year,
+                location = "IDK",
+                link = newspaper.a['href'],
+                data_provider = "Google News Archive"
+            ))
+
+    return titles
+
 def data_dumper(newspaper_data, filename):
     dataframe = pandas.read_json(json.dumps(newspaper_data))
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-data_dumper(extract_chronicling_america(), 'chronicling_america.csv')
+data_dumper(extract_google_news_archive(), 'google_news_archive.csv')
