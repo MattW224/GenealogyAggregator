@@ -293,7 +293,7 @@ def extract_google_news_archive():
     return titles
 
 # https://fairhopepl.advantage-preservation.com/
-def extract_archive_preservation():
+def extract_advantage_preservation():
     titles = []
     SITE_DIRECTORY = "https://directory.advantage-preservation.com/SiteDirectory"
 
@@ -309,8 +309,6 @@ def extract_archive_preservation():
         state_name = state.text.strip()
         if not state_name:
             continue
-
-        print(state_name)
 
         newspapers = requests.get(
             url = "https://directory.advantage-preservation.com/Date/GetCityListSiteDir",
@@ -329,10 +327,19 @@ def extract_archive_preservation():
             }
         )
 
+        status_code = newspaper_details.status_code
+        if status_code != 200:
+            print(f"\nReceived status code {status_code} on {newspaper_details.url}")
+            print(newspaper)
+            continue
+
         newspaper_soup = BeautifulSoup(newspaper_details.content, "html.parser")
         date_markup = newspaper_soup.find("input", {"id": "hdnViewAll"})
-        year_range = date_markup['value'].split(',')
-        
+        try:
+            year_range = date_markup['value'].split(',')
+        except:
+            year_range = ["Unknown"]
+
         location = newspaper['cityName'] + ", " + newspaper['StateName']
 
         titles.append(__item_formatter(
@@ -351,4 +358,4 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-data_dumper(extract_archive_preservation(), 'archive_preservation.csv')
+data_dumper(extract_advantage_preservation(), 'archive_preservation.csv')
