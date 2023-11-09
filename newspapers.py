@@ -22,13 +22,16 @@ def __item_formatter(title, start_year, end_year, location, link, data_provider)
         'data_provider': data_provider
     }
 
-async def __fetch(session, url):
+async def __fetch(session, url, content_type):
     async with session.get(url, ssl=True) as response:
-        return await response.json(content_type="application/json")
+        if content_type == "application/json":
+            return await response.json(content_type=content_type)
+        else:
+            return await response.text()
 
-async def __fetch_all(urls, loop):
+async def __fetch_all(urls, loop, content_type="application/json"):
     async with aiohttp.ClientSession(loop=loop, headers=USER_AGENT) as session:
-        results = await asyncio.gather(*[__fetch(session, url) for url in urls], return_exceptions=True)
+        results = await asyncio.gather(*[__fetch(session, url, content_type) for url in urls], return_exceptions=True)
         return results
 
 # https://chroniclingamerica.loc.gov/
@@ -295,6 +298,8 @@ def extract_google_news_archive():
 # https://fairhopepl.advantage-preservation.com/
 def extract_advantage_preservation():
     titles = []
+    loop = asyncio.get_event_loop()
+
     SITE_DIRECTORY = "https://directory.advantage-preservation.com/SiteDirectory"
 
     page = requests.get(SITE_DIRECTORY)
@@ -302,44 +307,36 @@ def extract_advantage_preservation():
 
     # Manually parse state names from UI, because "state" is misleading -- not necessarily
     # US states. It contains oddities like "Cuba" and "Griffin".
-    state_markup = soup.find("ul", {"class": "stateUl"})
+    state_html = soup.find("ul", {"class": "stateUl"})
 
-    state_newspapers = []
-    for state in state_markup:
+    state_urls = []
+    for state in state_html:
         state_name = state.text.strip()
         if not state_name:
             continue
 
-        newspapers = requests.get(
-            url = "https://directory.advantage-preservation.com/Date/GetCityListSiteDir",
-            params = {
-                "state": state_name
-            }
-        ).json()
+        state_url = f"https://directory.advantage-preservation.com/Date/GetCityListSiteDir?state={state_name}"
+        state_urls.append(state_url)
 
-        state_newspapers.extend(newspapers['DataState'])
+    # Get all newspapers belonging to a specified state.
+    state_newspapers = loop.run_until_complete(__fetch_all(state_urls, loop))
 
-    for newspaper in state_newspapers:
-        newspaper_details = requests.get(
-            url = newspaper['url'] + "//search",
-            params = {
-                "t": newspaper["TitleID"]
-            }
-        )
+    # Flatten array.
+    newspapers = [newspaper for state_newspaper in state_newspapers for newspaper in state_newspaper['DataState']]    
+    # Create array of URLs to parallelize requests for date information.
+    newspaper_date_urls = [f"{newspaper['url']}//search?t={newspaper['TitleID']}" for newspaper in newspapers]
 
-        status_code = newspaper_details.status_code
-        if status_code != 200:
-            print(f"\nReceived status code {status_code} on {newspaper_details.url}")
-            print(newspaper)
-            continue
+    publication_info = loop.run_until_complete(__fetch_all(newspaper_date_urls, loop, "text/html"))
 
-        newspaper_soup = BeautifulSoup(newspaper_details.content, "html.parser")
-        date_markup = newspaper_soup.find("input", {"id": "hdnViewAll"})
+    for index, newspaper in enumerate(newspapers):
         try:
+            publication_soup = BeautifulSoup(publication_info[index], "html.parser")
+            date_markup = publication_soup.find("input", {"id": "hdnViewAll"})
             year_range = date_markup['value'].split(',')
+        # Might fail because of connection error, or no dates published.
         except:
             year_range = ["Unknown"]
-
+        
         location = newspaper['cityName'] + ", " + newspaper['StateName']
 
         titles.append(__item_formatter(
@@ -347,7 +344,7 @@ def extract_advantage_preservation():
             start_year=year_range[0],
             end_year=year_range[-1],
             location=location,
-            link=newspaper_details.url,
+            link=newspaper_date_urls[index],
             data_provider="Advantage-Preservation.com"
         ))
     
@@ -358,4 +355,4 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 # Sample usage
-data_dumper(extract_advantage_preservation(), 'archive_preservation.csv')
+data_dumper(extract_advantage_preservation(), 'advantage_preservation.csv')
