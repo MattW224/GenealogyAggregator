@@ -43,25 +43,43 @@ def extract_chronicling_america():
         headers = USER_AGENT
     ).json()
 
-    newspaper_urls = [newspaper["url"] for newspaper in overview["newspapers"]]
+    newspaper_urls = list({newspaper["url"] for newspaper in overview["newspapers"]})
     
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     newspapers = loop.run_until_complete(__fetch_all(newspaper_urls, loop))
 
     for newspaper in newspapers:
         start_date = newspaper['issues'][0]['date_issued']
         end_date = newspaper['issues'][-1]['date_issued']
 
-        place_name = newspaper['place'][0]
+        place_name = newspaper['place_of_publication']
+
+        newspaper_title = newspaper['name']
+
+        PERIOD = '.'
+        DOTTED_VOLUME = '. [volume]'
+        VOLUME = '[volume]'
+
+        # Get newspaper names consistent.
+        if newspaper_title.endswith(PERIOD):
+            newspaper_title = newspaper_title.split(PERIOD)[0]
+        elif newspaper_title.endswith(DOTTED_VOLUME):
+            newspaper_title = newspaper_title.split(DOTTED_VOLUME)[0]
+        elif newspaper_title.endswith(VOLUME):
+            newspaper_title = newspaper_title.split(VOLUME)[0]
+
+        if(len(newspaper['place']) == 1):
+            place_name = ", ".join(newspaper['place'][0].split("--")[::-1])
+        else:
+            place_name = newspaper['place_of_publication']
 
         titles.append(__item_formatter(
-            # TODO: Remove "[volume]" postfix from newspaper name.
-            title=newspaper['name'],
+            title=newspaper_title,
             start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
             # Besides, we're more interested in what's digitized than publication dates.
             end_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
-            location=", ".join(place_name.split("--")[::-1]),
+            location=place_name,
             link=newspaper['url'][:-5],
             data_provider="ChroniclingAmerica.loc.gov"
         ))
