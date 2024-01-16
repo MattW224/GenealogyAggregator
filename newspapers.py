@@ -117,19 +117,23 @@ def extract_newspapers():
         newspaper_urls.append(prepared_request.url)
         newspapers_scanned += increment
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     paginated_response = loop.run_until_complete(__fetch_all(newspaper_urls, loop))
 
     for page in paginated_response:
-        for title in page["titles"]:
-            titles.append(__item_formatter(
-                title=title['title'],
-                start_year=title['product_canonical_start_year'],
-                end_year=title['product_canonical_end_year'],
-                location=title['location']['display'],
-                link= f"https://www.newspapers.com{title['url']}",
-                data_provider="Newspapers.com"
-            ))
+        try:
+            for title in page["titles"]:
+                titles.append(__item_formatter(
+                    title=title['title'],
+                    start_year=title['product_canonical_start_year'],
+                    end_year=title['product_canonical_end_year'],
+                    location=title['location']['display'],
+                    link= f"https://www.newspapers.com{title['url']}",
+                    data_provider="Newspapers.com"
+                ))
+        except KeyError:
+            print(f"\nReceived {page} on URL:\n ${prepared_request.url}\n")
+            continue
 
     return titles
 
@@ -243,7 +247,6 @@ def extract_genealogy_bank():
         while current_page_number <= total_webpages:
             url = BASE_URL + state_name + f"?page={current_page_number}"
             r = requests.get(url)
-            print(url)
             soup = BeautifulSoup(r.content, 'html.parser')
 
             # Finds paper count that is listed at the top for each state's page.
@@ -316,7 +319,7 @@ def extract_google_news_archive():
 # https://fairhopepl.advantage-preservation.com/
 def extract_advantage_preservation():
     titles = []
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
 
     SITE_DIRECTORY = "https://directory.advantage-preservation.com/SiteDirectory"
 
@@ -372,5 +375,22 @@ def data_dumper(newspaper_data, filename):
     dataframe = pandas.read_json(json.dumps(newspaper_data))
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
-# Sample usage
-data_dumper(extract_advantage_preservation(), 'advantage_preservation.csv')
+newspapers = []
+
+print("Executing data pull for Newspapers.com...")
+newspapers.extend(extract_newspapers())
+print("Executing data pull for Advantage Preservation...")
+newspapers.extend(extract_advantage_preservation())
+print("Executing data pull for Chronicling America...")
+newspapers.extend(extract_chronicling_america())
+print("Executing data pull for GenealogyBank...")
+newspapers.extend(extract_genealogy_bank())
+print("Executing data pull for Google News Archive...")
+newspapers.extend(extract_google_news_archive())
+print("Executing data pull for Newspaper Archive...")
+newspapers.extend(extract_newspaper_archive())
+# Skip NYS Historic Newspapers, because they reformatted their site.
+print("Skipping NYS Historic Newspapers -- redesigned, and requires new scraping...")
+# newspapers.extend(extract_nys_historic_newspapers())
+
+data_dumper(newspapers, 'the_great_data_pull.csv')
