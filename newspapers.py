@@ -194,35 +194,52 @@ def extract_newspaper_archive():
 
 # https://nyshistoricnewspapers.org/
 def extract_nys_historic_newspapers():
+    ENDPOINT = "https://nyshistoricnewspapers.org"
+
     titles = []
 
-    encoded_html = requests.get(
-        url = "https://nyshistoricnewspapers.org/newspapers/",
+    holdings = requests.get(
+        url = f"{ENDPOINT}/?a=cl&cl=CL1&e=-------en-20--1--txt-txIN----------",
         headers = USER_AGENT
     )
 
-    decoded_html = encoded_html.content.decode('utf-8')
-    soup = BeautifulSoup(decoded_html, 'html.parser')
-    table = soup.find('table', class_='browse_collect')
-    table_rows = table.find_all('tr')
+    decoded_html = holdings.content.decode('utf-8')
+    holdings_soup = BeautifulSoup(decoded_html, 'html.parser')
 
-    for row in table_rows[1:]:
-        columns = row.find_all('td')
+    chapters = holdings_soup.findAll('ul', class_='publicationbrowserlist')    
+    titles_markup = [li for chapter in chapters for li in chapter.findAll("li")]
 
-        # Example: "Buffalo, N.Y., 1971-198?"
-        publicationOverview = columns[0].br.nextSibling
-        # Stripping publication years -- redundant with third and fourth columns.
-        location = publicationOverview[0:publicationOverview.rindex(',')]
+    for title_markup in titles_markup:
+        newspaper_endpoint = ENDPOINT + title_markup.a['href']
 
-        start_date = columns[3].text.strip()
-        end_date = columns[4].text.strip()
+        newspaper = requests.get(
+            url = newspaper_endpoint,
+            headers = USER_AGENT
+        )
+
+        decoded_html = newspaper.content.decode('utf-8')
+        newspaper_soup = BeautifulSoup(decoded_html, 'html.parser')
+
+        publication_info = newspaper_soup.find("div", {"id": "publicationlevelwrap"})
+
+        try:
+            title = publication_info.find("b", string="Title:").parent.b.nextSibling
+            location = publication_info.find("b", string="Location:").parent.text.split(":")[1]
+            dates = publication_info.find("b", string="Available online:").parent.b.nextSibling
+        except AttributeError:
+            # Occurs because NYS has only one issue, and links directly to the PDF -- no pub. info.
+            print("Could not parse publisher information from URL:\n" + newspaper_endpoint + "\n")
+            continue
+
+        # Get start and end dates from string like "24 April 1909 - 24 January 1931 (12 issues)"
+        start_date, end_date = dates.split('(')[0].split('-')
 
         titles.append(__item_formatter(
-            title=columns[0].strong.text,
-            start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
-            end_year=datetime.datetime.strptime(end_date, "%Y-%m-%d").year,
-            location=location,
-            link=f"https://nyshistoricnewspapers.org{columns[0].a['href']}",
+            title=title,
+            start_year=datetime.datetime.strptime(start_date.strip(), '%d %B %Y').year,
+            end_year=datetime.datetime.strptime(end_date.strip(), '%d %B %Y').year,
+            location=f"{location}, New York",
+            link=newspaper_endpoint,
             data_provider="NYSHistoricNewspapers.org"
         ))
 
@@ -376,7 +393,7 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 newspapers = []
-
+'''
 print("Executing data pull for Newspapers.com...")
 newspapers.extend(extract_newspapers())
 print("Executing data pull for Advantage Preservation...")
@@ -389,8 +406,9 @@ print("Executing data pull for Google News Archive...")
 newspapers.extend(extract_google_news_archive())
 print("Executing data pull for Newspaper Archive...")
 newspapers.extend(extract_newspaper_archive())
+'''
 # Skip NYS Historic Newspapers, because they reformatted their site.
-print("Skipping NYS Historic Newspapers -- redesigned, and requires new scraping...")
-# newspapers.extend(extract_nys_historic_newspapers())
+print("Executing data pull for NYS Historic Newspapers...")
+newspapers.extend(extract_nys_historic_newspapers())
 
-data_dumper(newspapers, 'the_great_data_pull.csv')
+data_dumper(newspapers, 'nys_historic.csv')
