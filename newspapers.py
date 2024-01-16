@@ -223,8 +223,8 @@ def extract_nys_historic_newspapers():
         publication_info = newspaper_soup.find("div", {"id": "publicationlevelwrap"})
 
         try:
-            title = publication_info.find("b", string="Title:").parent.b.nextSibling
-            location = publication_info.find("b", string="Location:").parent.text.split(":")[1]
+            title = publication_info.find("b", string="Title:").parent.b.nextSibling.strip()
+            location = publication_info.find("b", string="Location:").parent.text.split(":")[1].strip()
             dates = publication_info.find("b", string="Available online:").parent.b.nextSibling
         except AttributeError:
             # Occurs because NYS has only one issue, and links directly to the PDF -- no pub. info.
@@ -393,22 +393,26 @@ def data_dumper(newspaper_data, filename):
     dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 newspapers = []
-'''
+
 print("Executing data pull for Newspapers.com...")
 newspapers.extend(extract_newspapers())
+
 print("Executing data pull for Advantage Preservation...")
 newspapers.extend(extract_advantage_preservation())
+
 print("Executing data pull for Chronicling America...")
 newspapers.extend(extract_chronicling_america())
+
 print("Executing data pull for GenealogyBank...")
 newspapers.extend(extract_genealogy_bank())
+
 print("Executing data pull for Google News Archive...")
 newspapers.extend(extract_google_news_archive())
+
 print("Executing data pull for Newspaper Archive...")
 newspapers.extend(extract_newspaper_archive())
-'''
-# Skip NYS Historic Newspapers, because they reformatted their site.
+
 print("Executing data pull for NYS Historic Newspapers...")
 newspapers.extend(extract_nys_historic_newspapers())
 
-data_dumper(newspapers, 'nys_historic.csv')
+data_dumper(newspapers, 'great_data_dump.csv')
