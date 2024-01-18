@@ -62,11 +62,11 @@ def extract_chronicling_america():
 
         # Get newspaper names consistent.
         if newspaper_title.endswith(PERIOD):
-            newspaper_title = newspaper_title.split(PERIOD)[0]
+            newspaper_title = newspaper_title.rsplit(PERIOD, 1)[0].strip()
         elif newspaper_title.endswith(DOTTED_VOLUME):
-            newspaper_title = newspaper_title.split(DOTTED_VOLUME)[0]
+            newspaper_title = newspaper_title.rsplit(DOTTED_VOLUME, 1)[0].strip()
         elif newspaper_title.endswith(VOLUME):
-            newspaper_title = newspaper_title.split(VOLUME)[0]
+            newspaper_title = newspaper_title.rsplit(VOLUME, 1)[0].strip()
 
         if(len(newspaper['place']) == 1):
             place_name = ", ".join(newspaper['place'][0].split("--")[::-1])
