@@ -102,10 +102,11 @@ def WikiData_Search(town_list, town_catalog):
     print(str(coords_counter) + ' towns recognized in local database.')
     print(str(wiki_counter) + ' towns to search. Starting in three seconds:')
     
-    # Quits program if no towns are needed to search on WikiData.
+    # Sends empty data if no towns are needed to search on WikiData.
     if wiki_counter == 0:
-        print("No towns needed to search. Catalog is complete.")
-        sys.exit(1)
+        print("All towns are found in the town_catalog.csv")
+        return [], [], []
+        #sys.exit(1)
     
     time.sleep(3)
     print(u'\u2500' * 50)
@@ -202,7 +203,14 @@ def catalog_generator(town_list):
     # If the corrections file has not been created, the towns are searched in WikiData.
     # Towns not found are written to error_towns.csv for manual corrections.
     else:        
-        newtown_list, latitude_list, longitude_list = WikiData_Search(town_list, town_catalog)        
+        newtown_list, latitude_list, longitude_list = WikiData_Search(town_list, town_catalog)
+        
+        # Checks to see if the returned lists have any data. If no data is present,
+        # the function returns an empty array. The CoordinateGenerator.py file does the
+        # remaining work.
+        if not newtown_list and not latitude_list and not longitude_list:
+            return []
+        
         temp_list = [list(e) for e in zip(newtown_list, latitude_list, longitude_list)]
 
         # In order to prevent WikiData queries from running after the corrections file has
