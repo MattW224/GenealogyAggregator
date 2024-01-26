@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from core import *
 import requests
 import json
 import datetime
@@ -81,7 +82,7 @@ def extract_chronicling_america():
             end_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             location=place_name,
             link=newspaper['url'][:-5],
-            data_provider="ChroniclingAmerica.loc.gov"
+            data_provider=CHRONICLING_AMERICA
         ))
 
     return titles
@@ -129,7 +130,7 @@ def extract_newspapers():
                     end_year=title['product_canonical_end_year'],
                     location=title['location']['display'],
                     link= f"https://www.newspapers.com{title['url']}",
-                    data_provider="Newspapers.com"
+                    data_provider=NEWSPAPERS
                 ))
         except KeyError:
             print(f"\nReceived {page} on URL:\n ${prepared_request.url}\n")
@@ -183,7 +184,7 @@ def extract_newspaper_archive():
                 end_year=end_year,
                 location=f"{location}, {state}, {country}",
                 link=columns[0].a['href'],
-                data_provider="NewspaperArchive.com"
+                data_provider=NEWSPAPER_ARCHIVE
             ))
 
         # If publicationrowstring is blank, we exhausted the dataset.
@@ -240,7 +241,7 @@ def extract_nys_historic_newspapers():
             end_year=datetime.datetime.strptime(end_date.strip(), '%d %B %Y').year,
             location=f"{location}, New York",
             link=newspaper_endpoint,
-            data_provider="NYSHistoricNewspapers.org"
+            data_provider=NYS_HISTORIC_NEWSPAPERS
         ))
 
     return titles
@@ -287,7 +288,7 @@ def extract_genealogy_bank():
                     end_year=CURRENT_YEAR if end_date.strip() == "Current" else datetime.datetime.strptime(end_date.strip(), "%m/%d/%Y").year,
                     location=f"{city}, {state_name}",
                     link=f"https://genealogybank.com{columns[1].a['href']}",
-                    data_provider="GenealogyBank.com"
+                    data_provider=GENEALOGY_BANK
                 ))
 
             current_page_number += 1
@@ -328,7 +329,7 @@ def extract_google_news_archive():
                 end_year = datetime.datetime.strptime(end_date.strip(), date_format).year,
                 location = "IDK",
                 link = newspaper.a['href'],
-                data_provider = "Google News Archive"
+                data_provider = GOOGLE_NEWS_ARCHIVE
             ))
 
     return titles
@@ -373,7 +374,7 @@ def extract_advantage_preservation():
             year_range = date_markup['value'].split(',')
         # Might fail because of connection error, or no dates published.
         except:
-            year_range = ["Unknown"]
+            continue
         
         location = newspaper['cityName'] + ", " + newspaper['StateName']
 
@@ -383,7 +384,7 @@ def extract_advantage_preservation():
             end_year=year_range[-1],
             location=location,
             link=newspaper_date_urls[index],
-            data_provider="Advantage-Preservation.com"
+            data_provider=ADVANTAGE_PRESERVATION
         ))
     
     return titles
