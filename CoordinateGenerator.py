@@ -99,6 +99,8 @@ for index, town in enumerate(town_list):
             newdelimit[-1] = ', ' + newdelimit[-1]
             new_town = ''.join(newdelimit)
         scraped_towns.append(new_town)
+    elif database_list[index] == ADVANTAGE_PRESERVATION:
+        scraped_towns.append(new_town)
 
 # Removes entries that are in format "County, ST" from genealogybank. I tried deleting
 # in the above loop, but deleting entries above messed up the indexing.
