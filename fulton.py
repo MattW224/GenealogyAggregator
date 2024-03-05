@@ -1,6 +1,12 @@
-from core import state_abrv
+from core import *
 import pandas
 import pdb
+import urllib.parse
+
+def create_fulton_url(newspaper_entry):
+    base_url = 'fultonhistory.com/my old photos/Historical Newspapers United States and Canada login/{}/index.php'
+    fulton_url = base_url.format(newspaper_entry)
+    return 'https://' + urllib.parse.quote(fulton_url)
 
 def parse_newspaper_information(newspaper_entry):
     # Newspaper name composed location, and actual publication nane. Split the two.
@@ -71,13 +77,28 @@ state_abbreviations['AU'] = 'Australia'
 state_abbreviations['CN'] = 'Connecticut'
 state_abbreviations['DL'] = 'Delaware'
 
+titles = []
+
 df = pandas.read_excel(CATALOG, 'Alphabetic')
 for index, row in df.iterrows():
-
     dates = str(row['Approx Dates']).strip()
     # Ignore newspapers with empty, or invalid dates (e.g. "file not found").
     if not dates or not dates[0].isdigit():
         continue
 
     name, location = parse_newspaper_information(row['Newspaper'])
-    dates = parse_date_information(row['Approx Dates'])
+    publication_ranges = parse_date_information(row['Approx Dates'])
+
+    for publication_range in publication_ranges:
+        titles.append(item_formatter(
+            title=name,
+            start_year=publication_range[0],
+            end_year=publication_range[-1],
+            location=location,
+            link=create_fulton_url(row['Newspaper']),
+            data_provider=FULTON_HISTORY
+        ))
+
+data_dumper(titles, 'fulton.csv')
+
+

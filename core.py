@@ -1,5 +1,9 @@
+import json
+import pandas
+
 ADVANTAGE_PRESERVATION = "Advantage-Preservation.com"
 CHRONICLING_AMERICA = "ChroniclingAmerica.loc.gov"
+FULTON_HISTORY = "FultonHistory.com"
 GENEALOGY_BANK = "GenealogyBank.com"
 GOOGLE_NEWS_ARCHIVE = "Google News Archive"
 NEWSPAPERS = "Newspapers.com"
@@ -151,3 +155,18 @@ state_abrv = {
 	"Yukon":"YK",
 	"Northwest Territories":"NT"
 }
+
+# TODO: Is there a more Pythonic way?
+def item_formatter(title, start_year, end_year, location, link, data_provider):
+    return {
+        'title': title,
+        'start_year': start_year,
+        'end_year': end_year,
+        'location': location,
+        'link': link,
+        'data_provider': data_provider
+    }
+
+def data_dumper(newspaper_data, filename):
+    dataframe = pandas.read_json(json.dumps(newspaper_data))
+    dataframe.to_csv(filename, encoding="utf-8", index=False)

@@ -12,17 +12,6 @@ import pdb
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
 
-# TODO: Is there a more Pythonic way?
-def __item_formatter(title, start_year, end_year, location, link, data_provider):
-    return {
-        'title': title,
-        'start_year': start_year,
-        'end_year': end_year,
-        'location': location,
-        'link': link,
-        'data_provider': data_provider
-    }
-
 async def __fetch(session, url, content_type):
     async with session.get(url, ssl=True) as response:
         if content_type == "application/json":
@@ -74,7 +63,7 @@ def extract_chronicling_america():
         else:
             place_name = newspaper['place_of_publication']
 
-        titles.append(__item_formatter(
+        titles.append(item_formatter(
             title=newspaper_title,
             start_year=datetime.datetime.strptime(start_date, "%Y-%m-%d").year,
             # Used last issue instead of end year, because the latter can be unknown (e.g. "19xx").
@@ -124,7 +113,7 @@ def extract_newspapers():
     for page in paginated_response:
         try:
             for title in page["titles"]:
-                titles.append(__item_formatter(
+                titles.append(item_formatter(
                     title=title['title'],
                     start_year=title['product_canonical_start_year'],
                     end_year=title['product_canonical_end_year'],
@@ -177,7 +166,7 @@ def extract_newspaper_archive():
             country = columns[3].text.strip()
             start_year, end_year = columns[4].text.strip().split("-")
 
-            titles.append(__item_formatter(
+            titles.append(item_formatter(
                 # TODO: Remove "NEW" and "UPDATED" postfix from title.
                 title=columns[0].text.strip(),
                 start_year=start_year,
@@ -235,7 +224,7 @@ def extract_nys_historic_newspapers():
         # Get start and end dates from string like "24 April 1909 - 24 January 1931 (12 issues)"
         start_date, end_date = dates.split('(')[0].split('-')
 
-        titles.append(__item_formatter(
+        titles.append(item_formatter(
             title=title,
             start_year=datetime.datetime.strptime(start_date.strip(), '%d %B %Y').year,
             end_year=datetime.datetime.strptime(end_date.strip(), '%d %B %Y').year,
@@ -282,7 +271,7 @@ def extract_genealogy_bank():
                 city = columns[0].text.strip()
                 start_date, end_date = unicodedata.normalize("NFKD", columns[2].text.strip()).split("–")
 
-                papers.append(__item_formatter(
+                papers.append(item_formatter(
                     title=columns[1].a.text,
                     start_year=datetime.datetime.strptime(start_date.strip(), "%m/%d/%Y").year,
                     end_year=CURRENT_YEAR if end_date.strip() == "Current" else datetime.datetime.strptime(end_date.strip(), "%m/%d/%Y").year,
@@ -323,7 +312,7 @@ def extract_google_news_archive():
             dates = newspaper.findAll("font")[1].text
             start_date, end_date = dates.split("-")
 
-            titles.append(__item_formatter(
+            titles.append(item_formatter(
                 title = newspaper.b.text,
                 start_year = datetime.datetime.strptime(start_date.strip(), date_format).year,
                 end_year = datetime.datetime.strptime(end_date.strip(), date_format).year,
@@ -378,7 +367,7 @@ def extract_advantage_preservation():
         
         location = newspaper['cityName'] + ", " + newspaper['StateName']
 
-        titles.append(__item_formatter(
+        titles.append(item_formatter(
             title=newspaper['publicationName'],
             start_year=year_range[0],
             end_year=year_range[-1],
@@ -388,10 +377,6 @@ def extract_advantage_preservation():
         ))
     
     return titles
-
-def data_dumper(newspaper_data, filename):
-    dataframe = pandas.read_json(json.dumps(newspaper_data))
-    dataframe.to_csv(filename, encoding="utf-8", index=False)
 
 newspapers = []
 
