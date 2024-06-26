@@ -24,7 +24,7 @@ def parse_newspaper_information(newspaper_entry):
     try:
         state_name = state_abbreviations[state_abbreviation]
     except KeyError:
-        print(f'No state abbreviation found for probable abbreviation {probable_state_abbreviation}')
+        print(f'No state abbreviation found for probable abbreviation {state_abbreviation}')
         return None, None
 
     newspaper_name = " ".join(newspaper_elements[state_abbreviation_index + 1:])
@@ -76,6 +76,7 @@ state_abbreviations = {v: k for k, v in state_abrv.items()}
 state_abbreviations['AU'] = 'Australia'
 state_abbreviations['CN'] = 'Connecticut'
 state_abbreviations['DL'] = 'Delaware'
+state_abbreviations['IR'] = 'Ireland'
 
 titles = []
 
