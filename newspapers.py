@@ -1,5 +1,7 @@
 from bs4 import BeautifulSoup
 from core import *
+from selenium import webdriver
+from ratelimit import limits, sleep_and_retry
 import requests
 import json
 import datetime
@@ -8,9 +10,11 @@ import pandas
 import aiohttp
 import asyncio
 import pdb
+import urllib
+import time
 
 CURRENT_YEAR = datetime.date.today().year
-USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}
+USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"}
 
 async def __fetch(session, url, content_type):
     async with session.get(url, ssl=True) as response:
@@ -24,20 +28,25 @@ async def __fetch_all(urls, loop, content_type="application/json"):
         results = await asyncio.gather(*[__fetch(session, url, content_type) for url in urls], return_exceptions=True)
         return results
 
+@sleep_and_retry
+@limits(calls=5, period=1) # Five calls per second
+def get_with_throttling(newspaper_url):
+    return requests.get(url = newspaper_url, headers = USER_AGENT).json()
+
 # https://chroniclingamerica.loc.gov/
 def extract_chronicling_america():
-    titles = []
 
     overview = requests.get(
         url = "https://chroniclingamerica.loc.gov/newspapers.json",
         headers = USER_AGENT
     ).json()
-
     newspaper_urls = list({newspaper["url"] for newspaper in overview["newspapers"]})
-    
-    loop = asyncio.new_event_loop()
-    newspapers = loop.run_until_complete(__fetch_all(newspaper_urls, loop))
 
+    newspaper_data = []
+    for newspaper_url in newspaper_urls:
+        newspaper_data.append(get_with_throttling(newspaper_url))
+
+    titles = []
     for newspaper in newspapers:
         start_date = newspaper['issues'][0]['date_issued']
         end_date = newspaper['issues'][-1]['date_issued']
@@ -253,8 +262,11 @@ def extract_genealogy_bank():
 
         while current_page_number <= total_webpages:
             url = BASE_URL + state_name + f"?page={current_page_number}"
-            r = requests.get(url)
-            soup = BeautifulSoup(r.content, 'html.parser')
+
+            browser = webdriver.Chrome()
+            browser.get(url)
+
+            soup = BeautifulSoup(browser.page_source, 'html.parser')
 
             # Finds paper count that is listed at the top for each state's page.
             if not total_papers:
@@ -281,9 +293,12 @@ def extract_genealogy_bank():
                 ))
 
             current_page_number += 1
+            time.sleep(10) # Respect robots.txt
     return papers
 
 # https://news.google.com/newspapers
+# Excluded from the data pull below, because Not updated for decades.
+# First data pull is, and always will be current.
 def extract_google_news_archive():
     GOOGLE_ARCHIVE_ENDPOINT = "https://news.google.com/newspapers"
     ALPHABET = set("A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z")
@@ -328,22 +343,13 @@ def extract_advantage_preservation():
     titles = []
     loop = asyncio.new_event_loop()
 
-    SITE_DIRECTORY = "https://directory.advantage-preservation.com/SiteDirectory"
-
-    page = requests.get(SITE_DIRECTORY)
-    soup = BeautifulSoup(page.content, "html.parser")
-
-    # Manually parse state names from UI, because "state" is misleading -- not necessarily
-    # US states. It contains oddities like "Cuba" and "Griffin".
-    state_html = soup.find("ul", {"class": "stateUl"})
+    SITE_DIRECTORY = "https://api.historyarchives.online/Api/SiteDir/getDetail?url=https://directory.historyarchives.online"
+    manifest = requests.get(url=SITE_DIRECTORY).json()
+    states = [urllib.parse.quote(state["StateName"]) for state in manifest["statelist"]]
 
     state_urls = []
-    for state in state_html:
-        state_name = state.text.strip()
-        if not state_name:
-            continue
-
-        state_url = f"https://directory.advantage-preservation.com/Date/GetCityListSiteDir?state={state_name}"
+    for state in manifest["statelist"]:
+        state_url = f"https://directory.advantage-preservation.com/Date/GetCityListSiteDir?state={state["StateName"]}"
         state_urls.append(state_url)
 
     # Get all newspapers belonging to a specified state.
@@ -380,25 +386,22 @@ def extract_advantage_preservation():
 
 newspapers = []
 
-print("Executing data pull for Newspapers.com...")
-newspapers.extend(extract_newspapers())
+# print("Executing data pull for Newspapers.com...")
+# newspapers.extend(extract_newspapers())
 
 print("Executing data pull for Advantage Preservation...")
 newspapers.extend(extract_advantage_preservation())
 
-print("Executing data pull for Chronicling America...")
-newspapers.extend(extract_chronicling_america())
+# print("Executing data pull for Chronicling America...")
+# newspapers.extend(extract_chronicling_america())
 
-print("Executing data pull for GenealogyBank...")
-newspapers.extend(extract_genealogy_bank())
+# print("Executing data pull for GenealogyBank...")
+# newspapers.extend(extract_genealogy_bank())
 
-print("Executing data pull for Google News Archive...")
-newspapers.extend(extract_google_news_archive())
+# print("Executing data pull for Newspaper Archive...")
+# newspapers.extend(extract_newspaper_archive())
 
-print("Executing data pull for Newspaper Archive...")
-newspapers.extend(extract_newspaper_archive())
-
-print("Executing data pull for NYS Historic Newspapers...")
-newspapers.extend(extract_nys_historic_newspapers())
+# print("Executing data pull for NYS Historic Newspapers...")
+# newspapers.extend(extract_nys_historic_newspapers())
 
 data_dumper(newspapers, 'great_data_dump.csv')
