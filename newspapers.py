@@ -184,7 +184,7 @@ def extract_newspaper_archive():
             start_year, end_year = columns[4].text.strip().split("-")
 
             titles.append(item_formatter(
-                title=title,
+                title=cleaned_title,
                 start_year=start_year,
                 end_year=end_year,
                 location=f"{location}, {state}, {country}",
