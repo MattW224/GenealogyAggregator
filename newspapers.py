@@ -1,6 +1,10 @@
 from bs4 import BeautifulSoup
 from core import *
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions
+from selenium.webdriver.common.by import By
 from ratelimit import limits, sleep_and_retry
 import requests
 import json
@@ -12,6 +16,7 @@ import asyncio
 import pdb
 import urllib
 import time
+import math
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"}
@@ -253,6 +258,8 @@ def extract_genealogy_bank():
                 'SC', 'SD', 'TN', 'TX', 'UT', 'VA', 'VT', 'WA', 'WI', 'WV', 
                 'WY']
 
+    browser = webdriver.Chrome()
+    timeout = 10
     papers = []
 
     for state_name in STATE_LIST:
@@ -263,8 +270,14 @@ def extract_genealogy_bank():
         while current_page_number <= total_webpages:
             url = BASE_URL + state_name + f"?page={current_page_number}"
 
-            browser = webdriver.Chrome()
             browser.get(url)
+            print(url)
+
+            try:
+                element_present = expected_conditions.presence_of_element_located((By.CLASS_NAME, 'views-table'))
+                WebDriverWait(browser, timeout).until(element_present)
+            except TimeoutException:
+                print("Timed out waiting for page to load.")
 
             soup = BeautifulSoup(browser.page_source, 'html.parser')
 
@@ -273,7 +286,7 @@ def extract_genealogy_bank():
                 total_papers = int(soup.find('h1').text.split(" ")[3])
             # GenealogyBank indexes website at 1, but query parameter at 0.
             if not total_webpages:
-                total_webpages = int(total_papers/200)
+                total_webpages = math.ceil(total_papers/200) - 1
 
             table = soup.find('table', class_='views-table')
             table_rows = table.find_all('tr')
@@ -293,7 +306,7 @@ def extract_genealogy_bank():
                 ))
 
             current_page_number += 1
-            time.sleep(10) # Respect robots.txt
+            # time.sleep(10) # Respect robots.txt
     return papers
 
 # https://news.google.com/newspapers
@@ -386,22 +399,22 @@ def extract_advantage_preservation():
 
 newspapers = []
 
-# print("Executing data pull for Newspapers.com...")
-# newspapers.extend(extract_newspapers())
+print("Executing data pull for Newspapers.com...")
+newspapers.extend(extract_newspapers())
 
 print("Executing data pull for Advantage Preservation...")
 newspapers.extend(extract_advantage_preservation())
 
-# print("Executing data pull for Chronicling America...")
-# newspapers.extend(extract_chronicling_america())
+print("Executing data pull for Chronicling America...")
+newspapers.extend(extract_chronicling_america())
 
-# print("Executing data pull for GenealogyBank...")
-# newspapers.extend(extract_genealogy_bank())
+print("Executing data pull for GenealogyBank...")
+newspapers.extend(extract_genealogy_bank())
 
-# print("Executing data pull for Newspaper Archive...")
-# newspapers.extend(extract_newspaper_archive())
+print("Executing data pull for Newspaper Archive...")
+newspapers.extend(extract_newspaper_archive())
 
-# print("Executing data pull for NYS Historic Newspapers...")
-# newspapers.extend(extract_nys_historic_newspapers())
+print("Executing data pull for NYS Historic Newspapers...")
+newspapers.extend(extract_nys_historic_newspapers())
 
 data_dumper(newspapers, 'great_data_dump.csv')
