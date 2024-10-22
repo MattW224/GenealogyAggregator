@@ -175,14 +175,16 @@ def extract_newspaper_archive():
         for row in table_rows:
             columns = row.find_all('td')
 
+            title = columns[0].text.strip()
+            cleaned_title = title.removesuffix(" UPDATED").removesuffix(" NEW").strip()
+
             location = columns[1].text.strip()
             state = columns[2].text.strip()
             country = columns[3].text.strip()
             start_year, end_year = columns[4].text.strip().split("-")
 
             titles.append(item_formatter(
-                # TODO: Remove "NEW" and "UPDATED" postfix from title.
-                title=columns[0].text.strip(),
+                title=title,
                 start_year=start_year,
                 end_year=end_year,
                 location=f"{location}, {state}, {country}",
@@ -398,23 +400,24 @@ def extract_advantage_preservation():
     return titles
 
 newspapers = []
-
-print("Executing data pull for Newspapers.com...")
-newspapers.extend(extract_newspapers())
+'''
+print("Executing data pull for Chronicling America...")
+newspapers.extend(extract_chronicling_america())
 
 print("Executing data pull for Advantage Preservation...")
 newspapers.extend(extract_advantage_preservation())
 
-print("Executing data pull for Chronicling America...")
-newspapers.extend(extract_chronicling_america())
-
 print("Executing data pull for GenealogyBank...")
 newspapers.extend(extract_genealogy_bank())
 
-print("Executing data pull for Newspaper Archive...")
-newspapers.extend(extract_newspaper_archive())
+print("Executing data pull for Newspapers.com...")
+newspapers.extend(extract_newspapers())
 
 print("Executing data pull for NYS Historic Newspapers...")
 newspapers.extend(extract_nys_historic_newspapers())
+'''
+
+print("Executing data pull for Newspaper Archive...")
+newspapers.extend(extract_newspaper_archive())
 
 data_dumper(newspapers, 'great_data_dump.csv')
