@@ -17,6 +17,10 @@ import pdb
 import urllib
 import time
 import math
+import string
+import re
+import os
+import mysql.connector
 
 CURRENT_YEAR = datetime.date.today().year
 USER_AGENT = {'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"}
@@ -34,25 +38,52 @@ async def __fetch_all(urls, loop, content_type="application/json"):
         return results
 
 @sleep_and_retry
-@limits(calls=5, period=1) # Five calls per second
+@limits(calls=20, period=10)  # 20 calls per 10 seconds. From:
+# https://libraryofcongress.github.io/data-exploration/loc.gov%20JSON%20API/Chronicling_America/README.html#rate-limits
 def get_with_throttling(newspaper_url):
-    return requests.get(url = newspaper_url, headers = USER_AGENT).json()
+    print(newspaper_url)
+    return requests.get(url = newspaper_url).json()
 
-# https://chroniclingamerica.loc.gov/
-def extract_chronicling_america():
+def get_chronicling_america_diff():
+    # Get Chronicling America URLs already in database.
+    sql_query = "SELECT DISTINCT CONCAT(link, '.json') FROM scraped_data_v2 WHERE data_provider = 'ChroniclingAmerica.loc.gov';"
+    # Establish 
+    newspaper_db = mysql.connector.connect(
+        host="localhost",
+        user=os.environ['NEWSPAPERS_USER'],
+        password=os.environ['NEWSPAPERS_PW'],
+        database=os.environ['NEWSPAPERS_DB']
+    )
+    db_cursor = newspaper_db.cursor()
+    db_cursor.execute(sql_query)
+    db_rows = db_cursor.fetchall()
+    collected_urls = [db_row[0] for db_row in db_rows]
 
+    # Get Chronicling America URLs on source.
+    all_urls = get_chronicling_america_newspaper_urls()
+    
+    # Get URLs not loaded in database.
+    new_urls = [url for url in all_urls if url not in collected_urls]
+    return new_urls
+
+def get_chronicling_america_newspaper_urls():
     overview = requests.get(
         url = "https://chroniclingamerica.loc.gov/newspapers.json",
         headers = USER_AGENT
     ).json()
-    newspaper_urls = list({newspaper["url"] for newspaper in overview["newspapers"]})
+    return list({newspaper["url"] for newspaper in overview["newspapers"]})
+
+# https://chroniclingamerica.loc.gov/
+def extract_chronicling_america(newspaper_urls=[]):
+    if not newspaper_urls:
+        newspaper_urls = get_chronicling_america_newspaper_urls()
 
     newspaper_data = []
     for newspaper_url in newspaper_urls:
         newspaper_data.append(get_with_throttling(newspaper_url))
 
     titles = []
-    for newspaper in newspapers:
+    for newspaper in newspaper_data:
         start_date = newspaper['issues'][0]['date_issued']
         end_date = newspaper['issues'][-1]['date_issued']
 
@@ -60,17 +91,8 @@ def extract_chronicling_america():
 
         newspaper_title = newspaper['name']
 
-        PERIOD = '.'
-        DOTTED_VOLUME = '. [volume]'
-        VOLUME = '[volume]'
-
-        # Get newspaper names consistent.
-        if newspaper_title.endswith(PERIOD):
-            newspaper_title = newspaper_title.rsplit(PERIOD, 1)[0].strip()
-        elif newspaper_title.endswith(DOTTED_VOLUME):
-            newspaper_title = newspaper_title.rsplit(DOTTED_VOLUME, 1)[0].strip()
-        elif newspaper_title.endswith(VOLUME):
-            newspaper_title = newspaper_title.rsplit(VOLUME, 1)[0].strip()
+45
+$#
 
         if(len(newspaper['place']) == 1):
             place_name = ", ".join(newspaper['place'][0].split("--")[::-1])
@@ -399,25 +421,108 @@ def extract_advantage_preservation():
     
     return titles
 
-newspapers = []
+def extract_trove():
+    NEWSPAPER_KEY = "skos:narrower" # JSON element containing newspaper holdings
+    alphabet_characters = list(string.ascii_uppercase)
+    raw_data = []
+
+    titles = []
+    
+    for alphabet_character in alphabet_characters:
+        newspaper_url = f"https://trove.nla.gov.au/newspaper/browse?uri=ndp:browse/title/{alphabet_character}&filter=newspapers"
+        print(newspaper_url)
+        data = requests.get(url=newspaper_url).json()
+
+        if isinstance(data[NEWSPAPER_KEY], list):
+            raw_data.extend(data[NEWSPAPER_KEY])
+        else:
+            print("No newspapers found prefixed with the letter " + alphabet_character)
+
+    for newspaper in raw_data:
+        newspaper_field = newspaper["dc:title"].strip()
+        if not newspaper_field.endswith(')'):
+            newspaper_field = newspaper_field + ')'
+
+
+        # Regular expression to capture text inside and outside parentheses
+        match = re.match(r"^(.*?)\s*\((.*?)\)$", newspaper_field)
+        print(newspaper)
+
+        newspaper_title = match.group(1).strip()
+        inside_parentheses = match.group(2)
+
+        # Delimiter between location and publication year range.
+        if ":" not in inside_parentheses:
+            location = 'Unknown'
+            publication_years = inside_parentheses
+            items = [{"location": location, "publication_years": publication_years}]
+        else:
+            has_multiple_publications = inside_parentheses.count(":") > 1
+            if has_multiple_publications:
+                locations, publication_years = inside_parentheses.rsplit(':', 1)
+                
+                location_split = locations.split(":")
+                publication_years_split = publication_years.split(";")
+
+                items = []
+                for location, year_range in zip(location_split, publication_years_split):
+                    items.append({
+                        "location": location,
+                        "publication_years": year_range
+                    })
+                
+            else:
+                location, publication_years = inside_parentheses.split(":")
+                items = [{"location": location, "publication_years": publication_years}]
+
+        for item in items:
+            title = newspaper_title.strip()
+            location = item["location"].strip()
+            link = newspaper["dc:identifier"].strip()
+
+            # Different date formats
+            # 1863 - 1900; 1915 - 1918
+            # 1863 - 1900
+            # 1863
+            year_ranges = re.split(r"[;,]", item["publication_years"])
+            for year_range in year_ranges:
+                if "-" in year_range:
+                    start_year, end_year = year_range.split('-')
+                    start_year = start_year.strip()
+                    end_year = end_year.strip()
+                else:
+                    year_range = year_range.strip()
+                    start_year = year_range
+                    end_year = year_range
+
+                titles.append(item_formatter(
+                    title = title,
+                    start_year = start_year,
+                    end_year = end_year,
+                    location = location,
+                    link = link,
+                    data_provider = TROVE
+                ))
+    
+    return titles
 '''
 print("Executing data pull for Chronicling America...")
-newspapers.extend(extract_chronicling_america())
+data_dumper(extract_chronicling_america(get_chronicling_america_diff()), 'chronicling_america.csv')
 
 print("Executing data pull for Advantage Preservation...")
-newspapers.extend(extract_advantage_preservation())
+data_dumper(extract_advantage_preservation(), 'advantage_preservation.csv')
 
 print("Executing data pull for GenealogyBank...")
-newspapers.extend(extract_genealogy_bank())
+data_dumper(extract_genealogy_bank(), 'genealogy_bank.csv')
 
 print("Executing data pull for Newspapers.com...")
-newspapers.extend(extract_newspapers())
+data_dumper(extract_newspapers(), 'newspapers.csv')
 
 print("Executing data pull for NYS Historic Newspapers...")
-newspapers.extend(extract_nys_historic_newspapers())
-'''
+data_dumper(extract_nys_historic_newspapers(), 'nys_historic_newspapers.csv')
 
 print("Executing data pull for Newspaper Archive...")
-newspapers.extend(extract_newspaper_archive())
+data_dumper(extract_newspaper_archive(), 'newspaper_archive.csv')
+'''
 
-data_dumper(newspapers, 'great_data_dump.csv')
+data_dumper(extract_trove(), 'trove.csv')

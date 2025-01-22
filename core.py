@@ -9,6 +9,7 @@ GOOGLE_NEWS_ARCHIVE = "Google News Archive"
 NEWSPAPERS = "Newspapers.com"
 NEWSPAPER_ARCHIVE = "NewspaperArchive.com"
 NYS_HISTORIC_NEWSPAPERS = "NYSHistoricNewspapers.org"
+TROVE = "Trove.nla.gov.au"
 
 catalog_name = 'town_catalog.csv'
 
